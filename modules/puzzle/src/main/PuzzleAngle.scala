@@ -14,6 +14,7 @@ sealed abstract class PuzzleAngle(val key: PuzzleAngle.Key):
     case PuzzleAngle.Theme(PuzzleTheme.mix) => "mix"
     case PuzzleAngle.Theme(_) => "theme"
     case PuzzleAngle.Opening(_) => "opening"
+    case PuzzleAngle.Smart => "smart"
 
 object PuzzleAngle:
   type Key = String
@@ -39,6 +40,13 @@ object PuzzleAngle:
     def description = I18nKey(s"From games with the opening: $openingName")
     def asTheme = none
 
+  /** Puzzles chosen from themes inferred from the user's recent analysed games. */
+  case object Smart extends PuzzleAngle("smart"):
+    val name = I18nKey.puzzle.smartPuzzles
+    val description = I18nKey.puzzle.smartPuzzlesDescription
+    def asTheme = none
+    def opening = none
+
   // def apply(theme: PuzzleTheme.Key): PuzzleAngle = Theme(theme)
   def apply(theme: PuzzleTheme): PuzzleAngle = Theme(theme.key)
   // def apply(opening: SimpleOpening.Key): PuzzleAngle = Opening(opening)
@@ -46,11 +54,13 @@ object PuzzleAngle:
   def apply(opening: SimpleOpening): PuzzleAngle = Opening(Right(opening.key))
 
   def find(key: Key): Option[PuzzleAngle] =
-    PuzzleTheme
-      .findVisible(key)
-      .map(apply)
-      .orElse(LilaOpeningFamily.find(key).map(apply))
-      .orElse(SimpleOpening.find(key).map(apply))
+    if key == Smart.key then Smart.some
+    else
+      PuzzleTheme
+        .findVisible(key)
+        .map(apply)
+        .orElse(LilaOpeningFamily.find(key).map(apply))
+        .orElse(SimpleOpening.find(key).map(apply))
 
   val mix: PuzzleAngle = apply(PuzzleTheme.mix)
 

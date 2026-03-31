@@ -8,6 +8,8 @@ import play.api.mvc.*
 import lila.app.{ *, given }
 import lila.core.i18n.Language
 import lila.core.id.PuzzleId
+import chess.Speed
+
 import lila.puzzle.{
   Puzzle as Puz,
   PuzzleAngle,
@@ -16,6 +18,7 @@ import lila.puzzle.{
   PuzzleSettings,
   PuzzleStreak,
   PuzzleTheme,
+  SmartPuzzleRecentAnalysis,
   difficultyCookie
 }
 import lila.rating.PerfType
@@ -39,7 +42,14 @@ final class Puzzle(env: Env, apiC: => Api) extends LilaController(env):
     settings <- ctx.user.traverse(env.puzzle.session.getSettings)
     prefJson = jsonView.pref(ctx.pref)
     page <- renderPage:
-      views.puzzle.ui.show(puzzle, json, prefJson, settings | PuzzleSettings.default(color), langPath)
+      views.puzzle.ui.show(
+        puzzle,
+        json,
+        prefJson,
+        settings | PuzzleSettings.default(color),
+        langPath,
+        angle = angle
+      )
   yield Ok(page).enforceCrossSiteIsolation
 
   def daily = Open:
@@ -69,10 +79,10 @@ final class Puzzle(env: Env, apiC: => Api) extends LilaController(env):
   def homeLang = LangPage(routes.Puzzle.home.url)(serveHome)
 
   private def serveHome(using Context) = NoBot:
-    val angle = PuzzleAngle.mix
     WithPuzzlePerf:
+      val angle = PuzzleAngle.mix
       selector
-        .nextPuzzleFor(angle, none, PuzzleDifficulty.fromReqSession(req))
+        .nextPuzzleFor(angle, none, PuzzleDifficulty.fromReqSession(req), puzzleSmartBoardOverride)
         .flatMap:
           _.fold(redirectNoPuzzle):
             renderShow(_, angle, langPath = LangPath(routes.Puzzle.home).some)
@@ -213,6 +223,20 @@ final class Puzzle(env: Env, apiC: => Api) extends LilaController(env):
       )
   }
 
+  def setSmartBoard(theme: String) = AuthBody { ctx ?=> me ?=>
+    NoBot:
+      bindForm(env.puzzle.forms.smartBoard)(
+        doubleJsonFormError,
+        enabled =>
+          WithPuzzlePerf:
+            env.puzzle.session.setSmartMatchBoard(enabled).flatMap: _ =>
+              negotiate(
+                html = fuccess(Redirect(routes.Puzzle.show(theme))),
+                json = jsonOkResult
+              )
+      )
+  }
+
   def themes = Open(serveThemes)
   def themesLang = LangPage(routes.Puzzle.themes)(serveThemes)
 
@@ -220,8 +244,32 @@ final class Puzzle(env: Env, apiC: => Api) extends LilaController(env):
     env.puzzle.api.angles.flatMap: angles =>
       negotiate(
         html = Ok.page(views.puzzle.ui.themes(angles)),
-        json = Ok(lila.puzzle.JsonView.angles(angles))
+        json = ctx.me match
+          case Some(m) =>
+            env.puzzle.smartRecentAnalysis.byUser(m.userId).map: opt =>
+              Ok(
+                lila.puzzle.JsonView.angles(angles) ++ Json.obj(
+                  "smartBuckets" -> jsonView.smartBucketsJson(opt)
+                )
+              )
+          case None =>
+            fuccess(Ok(lila.puzzle.JsonView.angles(angles)))
       )
+
+  private def serveSmartSetup(using me: Me)(using ctx: Context): Fu[Result] =
+    env.puzzle.smartRecentAnalysis.byUser(me.userId).flatMap: opt =>
+      val summaries =
+        SmartPuzzleRecentAnalysis.bucketSummaries(opt | SmartPuzzleRecentAnalysis.empty(me.userId))
+      Ok.page(views.puzzle.ui.smartSetup(summaries))
+
+  def smartSetup = Auth { ctx ?=> me ?=>
+    serveSmartSetup(using me)(using ctx)
+  }
+
+  def apiSmartBuckets = AuthOrScoped(_.Puzzle.Read, _.Web.Mobile) { _ ?=> me ?=>
+    JsonOk:
+      env.puzzle.smartRecentAnalysis.byUser(me.userId).map(jsonView.smartBucketsJson)
+  }
 
   def openings(order: String) = Open:
     env.puzzle.opening.collection.flatMap: collection =>
@@ -243,11 +291,26 @@ final class Puzzle(env: Env, apiC: => Api) extends LilaController(env):
     val langPath = LangPath(routes.Puzzle.show(angleOrId)).some
     WithPuzzlePerf:
       PuzzleAngle.find(angleOrId) match
+        case Some(PuzzleAngle.Smart) if ctx.isAnon =>
+          Redirect(routes.Auth.login).toFuccess
         case Some(angle) =>
-          selector
-            .nextPuzzleFor(angle, none, PuzzleDifficulty.fromReqSession(req))
-            .flatMap:
-              _.fold(redirectNoPuzzle) { renderShow(_, angle, langPath = langPath) }
+          val prep = ctx.me.collect { case m if angle == PuzzleAngle.Smart => m }.fold(funit): m =>
+            applySmartAngleRequestTweaks(ctx.req)(using m, summon[Perf])
+          prep.flatMap: _ =>
+            ctx.me match
+              case Some(me) if angle == PuzzleAngle.Smart =>
+                blockSmartIfBucketEmpty(me).flatMap:
+                  case Some(res) => fuccess(res)
+                  case None =>
+                    selector
+                      .nextPuzzleFor(angle, none, PuzzleDifficulty.fromReqSession(req), puzzleSmartBoardOverride)
+                      .flatMap:
+                        _.fold(redirectNoPuzzle) { renderShow(_, angle, langPath = langPath) }
+              case _ =>
+                selector
+                  .nextPuzzleFor(angle, none, PuzzleDifficulty.fromReqSession(req), puzzleSmartBoardOverride)
+                  .flatMap:
+                    _.fold(redirectNoPuzzle) { renderShow(_, angle, langPath = langPath) }
         case _ =>
           Puz.toId(angleOrId) match
             case Some(id) =>
@@ -282,10 +345,33 @@ final class Puzzle(env: Env, apiC: => Api) extends LilaController(env):
         .fold(Redirect(routes.Puzzle.openings()).toFuccess): angle =>
           val color = Color.fromName(colorKey)
           WithPuzzlePerf:
-            selector
-              .nextPuzzleFor(angle, color.some, PuzzleDifficulty.fromReqSession(req))
-              .flatMap:
-                _.fold(redirectNoPuzzle) { renderShow(_, angle, color = color) }
+            val prep = ctx.me.collect { case m if angle == PuzzleAngle.Smart => m }.fold(funit): m =>
+              applySmartAngleRequestTweaks(ctx.req)(using m, summon[Perf])
+            prep.flatMap: _ =>
+              ctx.me match
+                case Some(me) if angle == PuzzleAngle.Smart =>
+                  blockSmartIfBucketEmpty(me).flatMap:
+                    case Some(res) => fuccess(res)
+                    case None =>
+                      selector
+                        .nextPuzzleFor(
+                          angle,
+                          color.some,
+                          PuzzleDifficulty.fromReqSession(req),
+                          puzzleSmartBoardOverride
+                        )
+                        .flatMap:
+                          _.fold(redirectNoPuzzle) { renderShow(_, angle, color = color) }
+                case _ =>
+                  selector
+                    .nextPuzzleFor(
+                      angle,
+                      color.some,
+                      PuzzleDifficulty.fromReqSession(req),
+                      puzzleSmartBoardOverride
+                    )
+                    .flatMap:
+                      _.fold(redirectNoPuzzle) { renderShow(_, angle, color = color) }
 
   private val fetchRateLimit =
     env.security.ipTrust.rateLimit(300, 1.hour, "puzzle.fetch.ip", _.antiScraping(dch = 5, others = 1))
@@ -295,8 +381,33 @@ final class Puzzle(env: Env, apiC: => Api) extends LilaController(env):
       WithPuzzlePerf:
         val angle = PuzzleAngle.findOrMix(~get("angle"))
         val settings = reqSettings
-        FoundOk(selector.nextPuzzleFor(angle, settings.color.map(some), settings.difficulty.some)):
-          env.puzzle.jsonView(_, none, none)
+        val prep = ctx.me.collect { case m if angle == PuzzleAngle.Smart => m }.fold(funit): m =>
+          applySmartAngleRequestTweaks(ctx.req)(using m, summon[Perf])
+        prep.flatMap: _ =>
+          ctx.me match
+            case Some(me) if angle == PuzzleAngle.Smart =>
+              blockSmartIfBucketEmpty(me).flatMap:
+                case Some(res) => fuccess(res)
+                case None =>
+                  FoundOk(
+                    selector.nextPuzzleFor(
+                      angle,
+                      settings.color.map(some),
+                      settings.difficulty.some,
+                      puzzleSmartBoardOverride
+                    )
+                  ): p =>
+                    jsonView.analysis(p, angle, apiVersion = HTTPRequest.apiVersion(ctx.req))
+            case _ =>
+              FoundOk(
+                selector.nextPuzzleFor(
+                  angle,
+                  settings.color.map(some),
+                  settings.difficulty.some,
+                  puzzleSmartBoardOverride
+                )
+              ): p =>
+                jsonView.analysis(p, angle, apiVersion = HTTPRequest.apiVersion(ctx.req))
 
   def frame = Anon:
     InEmbedContext:
@@ -370,16 +481,59 @@ final class Puzzle(env: Env, apiC: => Api) extends LilaController(env):
       else nb
     fetchRateLimit(rateLimited, cost = cost):
       WithPuzzlePerf:
-        for puzzles <- batchSelect(PuzzleAngle.findOrMix(angleStr), reqSettings, nb)
-        yield Ok(puzzles)
+        val batchAngle = PuzzleAngle.findOrMix(angleStr)
+        (ctx.me match
+          case Some(m) =>
+            given Me = m
+            if batchAngle == PuzzleAngle.Smart then applySmartAngleRequestTweaks(ctx.req)(using m, summon[Perf])
+            else puzzleSmartBoardOverride.so(env.puzzle.session.setSmartMatchBoard)
+          case None => funit
+        ).flatMap: _ =>
+          ctx.me match
+            case Some(me) if batchAngle == PuzzleAngle.Smart =>
+              blockSmartIfBucketEmpty(me).flatMap:
+                case Some(res) => fuccess(res)
+                case None       => batchSelect(batchAngle, reqSettings, nb).map(Ok.apply)
+            case _ =>
+              batchSelect(batchAngle, reqSettings, nb).map(Ok.apply)
 
   private def reqSettings(using req: RequestHeader) = PuzzleSettings(
     PuzzleDifficulty.orDefault(~get("difficulty")),
     get("color").flatMap(Color.fromName)
   )
 
+  private def puzzleSmartBoardOverride(using req: RequestHeader): Option[Boolean] =
+    get("smartBoard").flatMap:
+      case "true" | "1" => true.some
+      case "false" | "0" => false.some
+      case _ => none
+
+  private def reqSpeed(using req: RequestHeader): Option[Speed] =
+    get("speed").flatMap(k => Speed.all.find(s => s.key.value == k))
+
+  private def applySmartAngleRequestTweaks(req: RequestHeader)(using me: Me, perf: Perf): Funit =
+    puzzleSmartBoardOverride(using req).fold(funit)(env.puzzle.session.setSmartMatchBoard) >>
+      reqSpeed(using req).fold(funit)(env.puzzle.session.setSmartSpeed)
+
+  private def smartBucketIsEmpty(me: Me): Fu[Boolean] =
+    env.puzzle.session.getSettings(me).flatMap: settings =>
+      val speed = settings.smartSpeed | Speed.Blitz
+      env.puzzle.smartRecentAnalysis.byUser(me.userId).map:
+        _.forall(_.gamesFor(speed).isEmpty)
+
+  private def blockSmartIfBucketEmpty(me: Me)(using ctx: Context): Fu[Option[Result]] =
+    smartBucketIsEmpty(me).flatMap:
+      case false => fuccess(none)
+      case true =>
+        negotiate(
+          html = Redirect(routes.Puzzle.smartSetup).toFuccess,
+          json = notFoundJson("No analysed games for this time control")
+        ).map(some)
+
   private def batchSelect(angle: PuzzleAngle, settings: PuzzleSettings, nb: Int)(using Option[Me], Perf) =
-    env.puzzle.batch.nextForMe(angle, settings, nb.atMost(50)).flatMap(env.puzzle.jsonView.batch)
+    env.puzzle.batch
+      .nextForMe(angle, settings, nb.atMost(50))
+      .flatMap(env.puzzle.jsonView.batch(_, hideSmartMeta = angle == PuzzleAngle.Smart))
 
   private val solveRateLimit =
     env.security.ipTrust.rateLimit(400, 1.hour, "puzzle.solve.ip", _.proxyMultiplier(2))
@@ -410,7 +564,22 @@ final class Puzzle(env: Env, apiC: => Api) extends LilaController(env):
                     .inject(Nil)
               given Option[Me] <- ctx.me.so(env.user.repo.me)
               nextPuzzles <- WithPuzzlePerf:
-                batchSelect(angle, reqSettings, ~getInt("nb"))
+                (ctx.me match
+                  case Some(m) =>
+                    given Me = m
+                    if angle == PuzzleAngle.Smart then applySmartAngleRequestTweaks(ctx.req)(using m, summon[Perf])
+                    else puzzleSmartBoardOverride.so(env.puzzle.session.setSmartMatchBoard)
+                  case None => funit
+                ).flatMap: _ =>
+                  ctx.me match
+                    case Some(me) if angle == PuzzleAngle.Smart =>
+                      smartBucketIsEmpty(me).flatMap:
+                        case true =>
+                          jsonView.batch(Nil, hideSmartMeta = true)(using ctx.me, summon[Perf])
+                        case false =>
+                          batchSelect(angle, reqSettings, ~getInt("nb"))
+                    case _ =>
+                      batchSelect(angle, reqSettings, ~getInt("nb"))
               result = nextPuzzles ++ Json.obj("rounds" -> rounds)
             yield Ok(result)
       )
@@ -427,10 +596,36 @@ final class Puzzle(env: Env, apiC: => Api) extends LilaController(env):
       negotiateApi(
         html = notFound,
         api = v =>
-          val angle = PuzzleAngle.mix
+          val angle = get("angle").flatMap(PuzzleAngle.find).getOrElse(PuzzleAngle.mix)
           WithPuzzlePerf:
-            Found(selector.nextPuzzleFor(angle, none, PuzzleDifficulty.fromReqSession(req))): p =>
-              JsonOk(jsonView.analysis(p, angle, apiVersion = v.some))
+            val prep = ctx.me.collect { case m if angle == PuzzleAngle.Smart => m }.fold(funit): m =>
+              applySmartAngleRequestTweaks(ctx.req)(using m, summon[Perf])
+            prep.flatMap: _ =>
+              ctx.me match
+                case Some(me) if angle == PuzzleAngle.Smart =>
+                  smartBucketIsEmpty(me).flatMap:
+                    case true =>
+                      notFoundJson("No analysed games for this time control").toFuccess
+                    case false =>
+                      Found(
+                        selector.nextPuzzleFor(
+                          angle,
+                          none,
+                          PuzzleDifficulty.fromReqSession(req),
+                          puzzleSmartBoardOverride
+                        )
+                      ): p =>
+                        JsonOk(jsonView.analysis(p, angle, apiVersion = v.some))
+                case _ =>
+                  Found(
+                    selector.nextPuzzleFor(
+                      angle,
+                      none,
+                      PuzzleDifficulty.fromReqSession(req),
+                      puzzleSmartBoardOverride
+                    )
+                  ): p =>
+                    JsonOk(jsonView.analysis(p, angle, apiVersion = v.some))
       )
 
   /* Mobile API: select a bunch of puzzles for offline use */

@@ -10,6 +10,14 @@ h2#openings {
   }
 }
 
+.smart-setup-help__p {
+  margin: 0 0 1em;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
 .help {
   @extend %box-padding-horiz, %box-radius;
 

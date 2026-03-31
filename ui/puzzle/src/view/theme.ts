@@ -11,6 +11,15 @@ export default function theme(ctrl: PuzzleCtrl): MaybeVNode {
   const data = ctrl.data,
     angle = data.angle;
   const showEditor = ctrl.mode === 'view' && !ctrl.autoNexting();
+  if (data.smartHideMeta) {
+    return hl('div.puzzle__side__theme', [
+      hl(
+        'a.puzzle__side__theme__back',
+        { attrs: { href: ctrl.routerWithLang('/training/smart-setup') } },
+        ['« ', angle.name],
+      ),
+    ]);
+  }
   if (data.replay) return showEditor ? hl('div.puzzle__side__theme', editor(ctrl)) : null;
   const backToTheme = (data: VNodeData, content: string[]): VNode =>
     hl(

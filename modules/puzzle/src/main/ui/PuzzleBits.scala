@@ -34,6 +34,9 @@ final class PuzzleBits(helpers: Helpers):
       a(cls := active.active("themes"), href := routes.Puzzle.themes)(
         trans.puzzle.puzzleThemes()
       ),
+      a(cls := active.active("smart"), href := routes.Puzzle.smartSetup)(
+        trans.puzzle.smartPuzzles()
+      ),
       a(cls := active.active("openings"), href := routes.Puzzle.openings())(
         trans.puzzle.byOpenings()
       ),

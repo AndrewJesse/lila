@@ -36,7 +36,7 @@ import type {
 } from './interfaces';
 import keyboard from './keyboard';
 import moveTest from './moveTest';
-import { pgnToTree, mergeSolution, nextCorrectMove } from './moveTree';
+import { pgnToTree, mergeSolution, nextCorrectMove, treeAtPuzzlePosition } from './moveTree';
 import Report from './report';
 import PuzzleSession from './session';
 import PuzzleStreak from './streak';
@@ -216,7 +216,12 @@ export default class PuzzleCtrl implements CevalHandler {
 
   initiate = (fromData: PuzzleData): void => {
     this.data = fromData;
-    this.tree = makeTree(pgnToTree(this.data.game.pgn.split(' ')));
+    const pgnParts = (this.data.game.pgn ?? '').trim().split(/\s+/).filter(Boolean);
+    const root =
+      pgnParts.length > 0
+        ? pgnToTree(pgnParts)
+        : treeAtPuzzlePosition(this.data.puzzle.fen, this.data.puzzle.initialPly);
+    this.tree = makeTree(root);
     const initialPath = treePath.fromNodeList(treeOps.mainlineNodeList(this.tree.root));
     this.mode = 'play';
     this.next = defer();
@@ -450,10 +455,13 @@ export default class PuzzleCtrl implements CevalHandler {
     );
     const next = res.next;
     if (next?.user && this.data.user) {
-      this.data.user.rating = next.user.rating;
-      this.data.user.provisional = next.user.provisional;
+      if (next.user.rating != null) {
+        this.data.user.rating = next.user.rating;
+        this.data.user.provisional = next.user.provisional;
+      }
       this.round = res.round;
-      if (res.round?.ratingDiff) this.session.setRatingDiff(this.data.puzzle.id, res.round.ratingDiff);
+      if (res.round?.ratingDiff && !this.data.smartHideMeta)
+        this.session.setRatingDiff(this.data.puzzle.id, res.round.ratingDiff);
     }
     if (win) site.sound.say(i18n.puzzle.puzzleSuccess);
     if (next) {

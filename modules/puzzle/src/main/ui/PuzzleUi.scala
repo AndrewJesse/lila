@@ -4,9 +4,13 @@ package ui
 import play.api.libs.json.*
 import scalalib.paginator.Paginator
 
+import chess.variant.Standard
+
 import lila.common.Json.given
 import lila.common.LilaOpeningFamily
 import lila.core.i18n.I18nKey
+import lila.puzzle.{ PuzzleAngle, SmartPuzzleRecentAnalysis }
+import lila.rating.PerfType
 import lila.ui.*
 
 import ScalatagsTemplate.{ *, given }
@@ -22,9 +26,12 @@ final class PuzzleUi(helpers: Helpers, val bits: PuzzleBits)(
       data: JsObject,
       pref: JsObject,
       settings: lila.puzzle.PuzzleSettings,
-      langPath: Option[lila.ui.LangPath] = None
+      langPath: Option[lila.ui.LangPath] = None,
+      angle: PuzzleAngle = PuzzleAngle.mix
   )(using ctx: Context) =
     val isStreak = data.value.contains("streak")
+    val smartMode = angle == PuzzleAngle.Smart
+    val showRatings = ctx.pref.showRatings && !smartMode
     Page(if isStreak then "Puzzle Streak" else trans.site.puzzles.txt())
       .css("puzzle")
       .css(ctx.pref.hasKeyboardMove.option("keyboardMove"))
@@ -41,8 +48,12 @@ final class PuzzleUi(helpers: Helpers, val bits: PuzzleBits)(
             .obj(
               "data" -> data,
               "pref" -> pref,
-              "showRatings" -> ctx.pref.showRatings,
-              "settings" -> Json.obj("difficulty" -> settings.difficulty.key).add("color" -> settings.color),
+              "showRatings" -> showRatings,
+              "settings" -> Json
+                .obj("difficulty" -> settings.difficulty.key)
+                .add("color" -> settings.color)
+                .add("smartMatchBoard" -> settings.smartMatchBoard)
+                .add("smartSpeed" -> settings.smartSpeed.map(_.key)),
               "externalEngineEndpoint" -> externalEngineEndpoint
             )
             .add("themes" -> ctx.isAuth.option(bits.jsonThemes))
@@ -84,6 +95,16 @@ final class PuzzleUi(helpers: Helpers, val bits: PuzzleBits)(
             standardFlash.map(div(cls := "box__pad")(_)),
             div(cls := "puzzle-themes")(
               all.themes.take(2).map(themeCategory),
+              ctx.me.map: _ =>
+                div(cls := "puzzle-themes__list puzzle-themes--smart")(
+                  a(cls := "puzzle-themes__link", href := routes.Puzzle.smartSetup)(
+                    img(src := assetUrl("images/puzzle-themes/mix.svg")),
+                    span(
+                      h3(PuzzleAngle.Smart.name()),
+                      span(PuzzleAngle.Smart.description())
+                    )
+                  )
+                ),
               h2(id := "openings")(
                 trans.puzzle.byOpenings.txt(),
                 a(href := routes.Puzzle.openings())(trans.site.more(), " »")
@@ -91,6 +112,54 @@ final class PuzzleUi(helpers: Helpers, val bits: PuzzleBits)(
               opening.listOf(all.openings.families.take(12)),
               all.themes.drop(2).map(themeCategory),
               themeInfo
+            )
+          )
+        )
+
+  def smartSetup(summaries: List[SmartPuzzleRecentAnalysis.BucketSummary])(using
+      ctx: Context
+  ) =
+    Page(trans.puzzle.smartPuzzlesChooseTimeControl.txt())
+      .css("puzzle.page")
+      .hrefLangs(lila.ui.LangPath(routes.Puzzle.smartSetup)):
+        main(cls := "page-menu")(
+          bits.pageMenu("smart", ctx.me),
+          div(cls := "page-menu__content box box-pad")(
+            h1(cls := "box__top")(trans.puzzle.smartPuzzlesChooseTimeControl()),
+            div(cls := "help smart-setup-help")(
+              {
+                val paras =
+                  trans.puzzle.smartPuzzlesSetupHowItWorks.txt().split("\n\n").toList.filter(_.nonEmpty)
+                frag(paras.map(block => p(cls := "smart-setup-help__p")(block))*)
+              }
+            ),
+            div(cls := "puzzle-themes")(
+              div(cls := "puzzle-themes__list")(
+                summaries.map: row =>
+                  val rowBody = span(
+                    h3(PerfType(Standard, row.speed).trans),
+                    span(
+                      row.lastPlayed match
+                        case Some(instant) =>
+                          trans.puzzle.smartPuzzleLastGamePlayed(showDate(instant))
+                        case None => trans.puzzle.smartPuzzleNoGamesInPoolYet()
+                    )
+                  )
+                  if row.nb > 0 then
+                    a(
+                      cls := "puzzle-themes__link",
+                      href := s"${routes.Puzzle.show(PuzzleAngle.Smart.key)}?speed=${row.speed.key}"
+                    )(rowBody)
+                  else
+                    div(
+                      cls := "puzzle-themes__link puzzle-themes__link--smart-empty",
+                      tabindex := -1,
+                      aria.disabled := "true"
+                    )(rowBody)
+              ),
+              p(cls := "text", dataIcon := Icon.InfoCircle)(
+                a(href := routes.Puzzle.themes)(trans.puzzle.puzzleThemes(), " »")
+              )
             )
           )
         )

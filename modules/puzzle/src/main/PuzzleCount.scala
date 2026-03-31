@@ -20,6 +20,7 @@ final private class PuzzleCountApi(
   def byAngle(angle: PuzzleAngle): Fu[Int] = angle match
     case PuzzleAngle.Theme(theme) => byTheme(theme)
     case PuzzleAngle.Opening(either) => openingApi.count(either)
+    case PuzzleAngle.Smart => byTheme(PuzzleTheme.mix.key)
 
   private val byThemeCache =
     given reactivemongo.api.bson.BSONHandler[ThemeCount] = typedMapHandler

@@ -2529,6 +2529,26 @@ interface I18n {
     recommended: string;
     /** Search puzzles */
     searchPuzzles: string;
+    /** Last game at this time control: %s */
+    smartPuzzleLastGamePlayed: I18nFormat;
+    /** Play games at this time control and request post-game server analysis to personalise Smart Puzzles from your mistakes. */
+    smartPuzzleNoGamesInPoolYet: string;
+    /** Smart Puzzles */
+    smartPuzzles: string;
+    /** Choose a time control */
+    smartPuzzlesChooseTimeControl: string;
+    /** Tactics from themes that match mistakes in your last analysed games */
+    smartPuzzlesDescription: string;
+    /** Match mistake positions */
+    smartPuzzlesMatchBoard: string;
+    /** Prefer puzzles with a similar number of pieces to your blunders and inaccuracies (can be turned off) */
+    smartPuzzlesMatchBoardDescription: string;
+    /** Find the best move in each position, like in other puzzle modes.&#10;&#10;Pick a time control below (Blitz, Rapid, etc.). When you finish a game and server analysis completes, we store how your moves were judged (blunders, mistakes, inaccuracies) and, when available, how many pieces were on the board at those moments. We keep up to the five most recent analysed games in that category, giving a bit more weight to the newest ones.&#10;&#10;From those judgements we infer which tactical themes to emphasise (for example more blunders may skew toward forks and hanging pieces; more inaccuracies toward quiet moves and endgames). You can optionally prefer puzzles with a similar amount of material to your error positions. Puzzle ratings are chosen near your puzzle rating and the search widens if needed.&#10;&#10;You do not need five full games: even one analysed game in a time control is enough to steer themes. Until you have at least one analysed game in a category, that row stays dimmed and cannot be opened—play there and request server analysis first. */
+    smartPuzzlesSetupHowItWorks: string;
+    /** Find the best move. */
+    smartTrainingDesc: string;
+    /** Training */
+    smartTrainingTitle: string;
     /** solved */
     solved: string;
     /** Special moves */

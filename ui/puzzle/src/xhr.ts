@@ -44,3 +44,9 @@ export const report = (puzzleId: string, reason: string): Promise<void> =>
     method: 'POST',
     body: xhrForm({ reason: reason.slice(0, maxReportLength) }),
   });
+
+export const smartBoard = (theme: string, enabled: boolean): Promise<void> =>
+  xhrJson(`/training/smart-board/${theme}`, {
+    method: 'POST',
+    body: xhrForm({ enabled }),
+  });

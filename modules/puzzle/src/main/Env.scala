@@ -12,7 +12,8 @@ private class PuzzleConfig(
     @ConfigName("mongodb.uri") val mongoUri: String,
     @ConfigName("collection.puzzle") val puzzleColl: CollName,
     @ConfigName("collection.round") val roundColl: CollName,
-    @ConfigName("collection.path") val pathColl: CollName
+    @ConfigName("collection.path") val pathColl: CollName,
+    @ConfigName("collection.smart_recent") val smartRecentColl: CollName
 )
 
 @Module
@@ -24,6 +25,7 @@ final class Env(
     cacheApi: lila.memo.CacheApi,
     mongoCacheApi: lila.memo.MongoCache.Api,
     gameRepo: lila.core.game.GameRepo,
+    uciMemo: lila.core.game.UciMemo,
     myEngines: lila.core.misc.analysis.MyEnginesAsJson,
     mongo: lila.db.Env
 )(using Executor, akka.actor.ActorSystem, akka.stream.Materializer, lila.core.i18n.Translator)(using
@@ -38,7 +40,8 @@ final class Env(
   val colls = PuzzleColls(
     puzzle = db(config.puzzleColl),
     round = db(config.roundColl),
-    path = db(config.pathColl)
+    path = db(config.pathColl),
+    smartRecent = db(config.smartRecentColl)
   )
 
   private val gameJson: GameJson = wire[GameJson]
@@ -59,6 +62,10 @@ final class Env(
 
   val anon: PuzzleAnon = wire[PuzzleAnon]
 
+  val smartRecentAnalysis = wire[SmartPuzzleRecentAnalysisRepo]
+
+  private val smartFinder = wire[SmartPuzzleFinder]
+
   val selector: PuzzleSelector = wire[PuzzleSelector]
 
   val batch: PuzzleBatch = wire[PuzzleBatch]
@@ -78,6 +85,8 @@ final class Env(
   val history = wire[PuzzleHistoryApi]
 
   val streak = wire[PuzzleStreakApi]
+
+  val _: SmartPuzzleAnalysisIndexer = wire[SmartPuzzleAnalysisIndexer]
 
   val complete = wire[PuzzleComplete]
 
@@ -111,5 +120,6 @@ final class Env(
 final class PuzzleColls(
     val puzzle: AsyncColl,
     val round: AsyncColl,
-    val path: AsyncColl
+    val path: AsyncColl,
+    val smartRecent: AsyncColl
 )

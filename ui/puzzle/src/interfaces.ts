@@ -20,6 +20,10 @@ export type PuzzleDifficulty = 'easiest' | 'easier' | 'normal' | 'harder' | 'har
 export interface PuzzleSettings {
   difficulty: PuzzleDifficulty;
   color?: Color;
+  /** Smart puzzles: prefer similar piece counts to mistake positions (default true). */
+  smartMatchBoard?: boolean;
+  /** Selected game pool (lichess clock category key). */
+  smartSpeed?: string;
 }
 
 export interface PuzzleOpts {
@@ -69,6 +73,8 @@ export interface PuzzleData {
   replay?: PuzzleReplay;
   streak?: string;
   externalEngines?: ExternalEngineInfo[];
+  /** Smart training: server strips ratings, themes, etc. */
+  smartHideMeta?: boolean;
 }
 
 export interface PuzzleReplay {
@@ -105,6 +111,8 @@ export interface PuzzleUser {
 
 export interface Puzzle {
   id: PuzzleId;
+  /** Position to solve; used when `game.pgn` is empty (e.g. source game missing). */
+  fen: FEN;
   solution: Uci[];
   rating: number;
   plays: number;

@@ -95,4 +95,14 @@ Play rapid and classical games to increase your chances of having a puzzle added
   <string name="noPuzzlesToShow">Nothing to show, go play some puzzles first!</string>
   <string name="improvementAreasDescription">Train these to optimise your progress!</string>
   <string name="strengthDescription">You perform the best in these themes</string>
+  <string name="smartPuzzles">Smart Puzzles</string>
+  <string name="smartPuzzlesDescription">Tactics from themes that match mistakes in your last analysed games</string>
+  <string name="smartPuzzlesMatchBoard">Match mistake positions</string>
+  <string name="smartPuzzlesMatchBoardDescription">Prefer puzzles with a similar number of pieces to your blunders and inaccuracies (can be turned off)</string>
+  <string name="smartTrainingTitle">Training</string>
+  <string name="smartTrainingDesc">Find the best move.</string>
+  <string name="smartPuzzlesChooseTimeControl">Choose a time control</string>
+  <string name="smartPuzzleLastGamePlayed">Last game at this time control: %s</string>
+  <string name="smartPuzzleNoGamesInPoolYet">Play games at this time control and request post-game server analysis to personalise Smart Puzzles from your mistakes.</string>
+  <string name="smartPuzzlesSetupHowItWorks">Find the best move in each position, like in other puzzle modes.&#10;&#10;Pick a time control below (Blitz, Rapid, etc.). When you finish a game and server analysis completes, we store how your moves were judged (blunders, mistakes, inaccuracies) and, when available, how many pieces were on the board at those moments. We keep up to the five most recent analysed games in that category, giving a bit more weight to the newest ones.&#10;&#10;From those judgements we infer which tactical themes to emphasise (for example more blunders may skew toward forks and hanging pieces; more inaccuracies toward quiet moves and endgames). You can optionally prefer puzzles with a similar amount of material to your error positions. Puzzle ratings are chosen near your puzzle rating and the search widens if needed.&#10;&#10;You do not need five full games: even one analysed game in a time control is enough to steer themes. Until you have at least one analysed game in a category, that row stays dimmed and cannot be opened—play there and request server analysis first.</string>
 </resources>

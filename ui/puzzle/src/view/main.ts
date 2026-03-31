@@ -153,7 +153,7 @@ function session(ctrl: PuzzleCtrl): MaybeVNode {
     ? hl('div.puzzle__session', [
         rounds.map(round => {
           const rd =
-            round.ratingDiff && ctrl.opts.showRatings
+            round.ratingDiff && ctrl.opts.showRatings && !ctrl.data.smartHideMeta
               ? round.ratingDiff > 0
                 ? '+' + round.ratingDiff
                 : round.ratingDiff

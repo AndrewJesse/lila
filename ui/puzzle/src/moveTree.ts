@@ -28,6 +28,15 @@ export function pgnToTree(pgn: San[]): TreeNode {
   return root;
 }
 
+/** Single-node mainline at the puzzle position (when source game PGN is unavailable). */
+export function treeAtPuzzlePosition(fen: FEN, ply: number): TreeNode {
+  return completeNode('standard')({
+    ply,
+    fen,
+    children: [],
+  });
+}
+
 export function mergeSolution(root: TreeWrapper, initialPath: TreePath, solution: Uci[], pov: Color): void {
   const initialNode = root.nodeAtPath(initialPath);
   const pos = Chess.fromSetup(parseFen(initialNode.fen).unwrap()).unwrap();

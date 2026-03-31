@@ -6,6 +6,8 @@ import play.api.libs.json.*
 
 import lila.common.Json.given
 import lila.core.LightUser
+import lila.core.perf.PerfKey
+import lila.rating.PerfType
 
 final private class GameJson(
     gameRepo: lila.core.game.GameRepo,
@@ -13,7 +15,16 @@ final private class GameJson(
     lightUserApi: lila.core.user.LightUserApi
 )(using Executor, lila.core.i18n.Translator):
 
+  private val logger = lila.log("puzzle.gameJson")
+
   given play.api.i18n.Lang = lila.core.i18n.defaultLang
+
+  /** Like [[apply]] but falls back to a stub when the source game was purged (common on thin dev DBs). */
+  def forPuzzle(puzzle: Puzzle, bc: Boolean)(using lila.core.i18n.Translate): Fu[JsObject] =
+    apply(puzzle.gameId, puzzle.initialPly, bc).recoverWith:
+      case e: Exception =>
+        logger.info(s"stub game json ${puzzle.gameId} (${puzzle.id}): ${e.getMessage}")
+        fuccess(if bc then stubBcJson(puzzle) else stubWebJson(puzzle))
 
   def apply(gameId: GameId, plies: Ply, bc: Boolean): Fu[JsObject] =
     (if bc then bcCache else cache).get(writeKey(gameId, plies))
@@ -45,13 +56,18 @@ final private class GameJson(
         generate(id, plies, true)
 
   private def generate(gameId: GameId, plies: Ply, bc: Boolean): Fu[JsObject] =
-    gameRepo.gameFromSecondary(gameId).orFail(s"Missing puzzle game $gameId!").flatMap { game =>
-      lightUserApi
-        .preloadMany(game.userIds)
-        .inject:
-          if bc then generateBc(game, plies)
-          else generate(game, plies)
-    }
+    gameRepo
+      .gameFromSecondary(gameId)
+      .flatMap:
+        case Some(game) => fuccess(game.some)
+        case None        => gameRepo.game(gameId)
+      .orFail(s"Missing puzzle game $gameId!")
+      .flatMap: game =>
+        lightUserApi
+          .preloadMany(game.userIds)
+          .inject:
+            if bc then generateBc(game, plies)
+            else generate(game, plies)
 
   private def generate(game: Game, plies: Ply): JsObject =
     Json
@@ -104,3 +120,27 @@ final private class GameJson(
         }
       )
       .add("clock", game.clock.map(_.config.show))
+
+  private def stubPlayers =
+    JsArray(
+      Vector(
+        Json.toJsObject(LightUser.ghost) ++ Json.obj("color" -> "white"),
+        Json.toJsObject(LightUser.ghost) ++ Json.obj("color" -> "black")
+      )
+    )
+
+  private def stubWebJson(puzzle: Puzzle)(using lila.core.i18n.Translate) =
+    Json
+      .obj(
+        "id" -> puzzle.gameId,
+        "perf" -> Json.obj(
+          "key" -> PerfKey.blitz,
+          "name" -> PerfType.Blitz.trans
+        ),
+        "rated" -> false,
+        "players" -> stubPlayers,
+        "pgn" -> ""
+      )
+
+  private def stubBcJson(puzzle: Puzzle)(using lila.core.i18n.Translate) =
+    stubWebJson(puzzle)

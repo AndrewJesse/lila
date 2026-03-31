@@ -139,8 +139,9 @@ lazy val cms = module("cms",
   Seq()
 )
 
+// `analyse` required: SmartPuzzleAnalysisIndexer listens on lila.analyse.actorApi.AnalysisReady
 lazy val puzzle = module("puzzle",
-  Seq(tree, memo, rating),
+  Seq(tree, memo, rating, game, analyse),
   tests.bundle
 )
 

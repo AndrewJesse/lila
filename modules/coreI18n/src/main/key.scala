@@ -1315,6 +1315,16 @@ object I18nKey:
     val `puzzlesFoundInUserGames`: I18nKey = "puzzle:puzzlesFoundInUserGames"
     val `nbPlayed`: I18nKey = "puzzle:nbPlayed"
     val `nbToReplay`: I18nKey = "puzzle:nbToReplay"
+    val `smartPuzzles`: I18nKey = "puzzle:smartPuzzles"
+    val `smartPuzzlesDescription`: I18nKey = "puzzle:smartPuzzlesDescription"
+    val `smartPuzzlesMatchBoard`: I18nKey = "puzzle:smartPuzzlesMatchBoard"
+    val `smartPuzzlesMatchBoardDescription`: I18nKey = "puzzle:smartPuzzlesMatchBoardDescription"
+    val `smartTrainingTitle`: I18nKey = "puzzle:smartTrainingTitle"
+    val `smartTrainingDesc`: I18nKey = "puzzle:smartTrainingDesc"
+    val `smartPuzzlesChooseTimeControl`: I18nKey = "puzzle:smartPuzzlesChooseTimeControl"
+    val `smartPuzzleLastGamePlayed`: I18nKey = "puzzle:smartPuzzleLastGamePlayed"
+    val `smartPuzzleNoGamesInPoolYet`: I18nKey = "puzzle:smartPuzzleNoGamesInPoolYet"
+    val `smartPuzzlesSetupHowItWorks`: I18nKey = "puzzle:smartPuzzlesSetupHowItWorks"
 
   object puzzleTheme:
     val `advancedPawn`: I18nKey = "puzzleTheme:advancedPawn"

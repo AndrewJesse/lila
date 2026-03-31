@@ -3,6 +3,8 @@ import { numberFormat } from 'lib/i18n';
 import * as licon from 'lib/licon';
 import { type VNode, dataIcon, onInsert, type MaybeVNode, hl } from 'lib/view';
 import { cmnToggleWrap } from 'lib/view/cmn-toggle';
+
+import * as xhr from '../xhr';
 import { userLink } from 'lib/view/userLink';
 
 import type PuzzleCtrl from '../ctrl';
@@ -18,6 +20,7 @@ export function puzzleBox(ctrl: PuzzleCtrl): VNode {
 }
 
 const angleImg = (ctrl: PuzzleCtrl): string => {
+  if (ctrl.data.smartHideMeta) return site.asset.url('images/puzzle-themes/mix.svg');
   const angle = ctrl.data.angle;
   const name =
     angle.opening || angle.openingAbstract ? 'opening' : angle.key.startsWith('mateIn') ? 'mate' : angle.key;
@@ -46,6 +49,7 @@ const puzzleInfos = (ctrl: PuzzleCtrl, puzzle: Puzzle): VNode =>
         ),
       ),
       ctrl.opts.showRatings &&
+        !ctrl.data.smartHideMeta &&
         hl(
           'p',
           i18n.puzzle.ratingX.asArray(
@@ -54,7 +58,8 @@ const puzzleInfos = (ctrl: PuzzleCtrl, puzzle: Puzzle): VNode =>
               : hl('strong', `${puzzle.rating}`),
           ),
         ),
-      hl('p', i18n.puzzle.playedXTimes.asArray(puzzle.plays, hl('strong', numberFormat(puzzle.plays)))),
+      !ctrl.data.smartHideMeta &&
+        hl('p', i18n.puzzle.playedXTimes.asArray(puzzle.plays, hl('strong', numberFormat(puzzle.plays)))),
     ]),
   ]);
 
@@ -112,6 +117,7 @@ export const userBox = (ctrl: PuzzleCtrl): VNode => {
     !data.replay &&
       !ctrl.streak &&
       data.user &&
+      !data.smartHideMeta &&
       cmnToggleWrap({
         id: ratedId,
         name: i18n.site.rated,
@@ -120,17 +126,18 @@ export const userBox = (ctrl: PuzzleCtrl): VNode => {
         disabled: ctrl.lastFeedback !== 'init' || ctrl.hintHasBeenShown(),
         redraw: ctrl.redraw,
       }),
-    hl(
-      'div.puzzle__side__user__rating',
-      ctrl.rated()
-        ? ctrl.opts.showRatings &&
-            hl('strong', [
-              data.user.rating - (diff || 0),
-              !!diff && diff > 0 && [' ', hl('good.rp', '+' + diff)],
-              !!diff && diff < 0 && [' ', hl('bad.rp', '−' + -diff)],
-            ])
-        : hl('p.puzzle__side__user__rating__casual', i18n.puzzle.yourPuzzleRatingWillNotChange),
-    ),
+    !data.smartHideMeta &&
+      hl(
+        'div.puzzle__side__user__rating',
+        ctrl.rated()
+          ? ctrl.opts.showRatings &&
+              hl('strong', [
+                data.user.rating - (diff || 0),
+                !!diff && diff > 0 && [' ', hl('good.rp', '+' + diff)],
+                !!diff && diff < 0 && [' ', hl('bad.rp', '−' + -diff)],
+              ])
+          : hl('p.puzzle__side__user__rating__casual', i18n.puzzle.yourPuzzleRatingWillNotChange),
+      ),
   ]);
 };
 
@@ -179,7 +186,22 @@ export function config(ctrl: PuzzleCtrl): MaybeVNode {
       },
       redraw: ctrl.redraw,
     }),
-    !data.user || data.replay || ctrl.streak ? null : renderDifficultyForm(ctrl),
+    !data.user || data.replay || ctrl.streak || data.smartHideMeta ? null : renderDifficultyForm(ctrl),
+    data.angle.key === 'smart' && data.user && !data.replay && !ctrl.streak
+      ? cmnToggleWrap({
+          id: 'puzzle-smart-board',
+          name: i18n.puzzle.smartPuzzlesMatchBoard,
+          title: i18n.puzzle.smartPuzzlesMatchBoardDescription,
+          checked: ctrl.opts.settings.smartMatchBoard !== false,
+          change(v) {
+            xhr.smartBoard(data.angle.key, v).then(() => {
+              ctrl.opts.settings.smartMatchBoard = v;
+              ctrl.redraw();
+            });
+          },
+          redraw: ctrl.redraw,
+        })
+      : null,
   ]);
 }
 
